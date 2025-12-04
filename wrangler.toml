@@ -1,4 +1,4 @@
-name = "jarvis-backend"
+name = "jarvis"
 main = "jarvis.js"
 compatibility_date = "2023-12-01"
 
