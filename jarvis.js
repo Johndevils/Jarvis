@@ -1,20 +1,20 @@
-// JARVIS Backend - Secure Version with Origin Restriction
+// JARVIS Backend - Fixed Version with Better Error Handling
 export default {
   async fetch(request, env, ctx) {
     // Define allowed origins
     const ALLOWED_ORIGINS = [
       'https://jarvis-997.pages.dev',
-      'https://jarvis-997.pages.dev/',  // With trailing slash
+      'https://jarvis-997.pages.dev/',
     ];
 
-    // Get the origin from the request
+    // Get origin from request
     const origin = request.headers.get('Origin');
     
-    // Check if the origin is allowed
+    // Check if origin is allowed
     const isAllowedOrigin = ALLOWED_ORIGINS.includes(origin) || 
                            (!origin && request.headers.get('User-Agent')?.includes('Mozilla'));
     
-    // Handle CORS preflight requests for allowed origins
+    // Handle CORS preflight requests
     if (request.method === 'OPTIONS') {
       if (isAllowedOrigin) {
         return new Response(null, {
@@ -49,7 +49,22 @@ export default {
     }
 
     try {
-      // Health check - simple and reliable
+      // Root endpoint
+      if (path === '/') {
+        return new Response(JSON.stringify({ 
+          message: 'J.A.R.V.I.S. Backend is running!',
+          version: '1.0.0',
+          endpoints: ['/health', '/api/query', '/test', '/debug'],
+          timestamp: new Date().toISOString()
+        }), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+          }
+        });
+      }
+
+      // Health check endpoint
       if (path === '/health') {
         return new Response(JSON.stringify({ 
           status: 'J.A.R.V.I.S. online',
@@ -64,19 +79,16 @@ export default {
         });
       }
 
-      // AI Query endpoint
-      if (path === '/api/query' && request.method === 'POST') {
-        return await handleAIQuery(request, env, origin);
-      }
-
-      // Test endpoint for debugging
-      if (path === '/test' && request.method === 'GET') {
+      // Debug endpoint - shows request details
+      if (path === '/debug') {
         return new Response(JSON.stringify({ 
-          message: 'Worker is working!',
+          message: 'Debug information',
           method: request.method,
           url: request.url,
+          path: path,
           origin: origin,
-          headers: Object.fromEntries(request.headers.entries())
+          headers: Object.fromEntries(request.headers.entries()),
+          query_params: Object.fromEntries(url.searchParams.entries())
         }), {
           headers: {
             'Content-Type': 'application/json',
@@ -85,11 +97,56 @@ export default {
         });
       }
 
+      // Test endpoint
+      if (path === '/test') {
+        return new Response(JSON.stringify({ 
+          message: 'Test endpoint working!',
+          method: request.method,
+          url: request.url,
+          origin: origin,
+          timestamp: new Date().toISOString()
+        }), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+          }
+        });
+      }
+
+      // AI Query endpoint - ONLY POST requests
+      if (path === '/api/query') {
+        if (request.method === 'POST') {
+          return await handleAIQuery(request, env, origin);
+        } else {
+          return new Response(JSON.stringify({ 
+            error: 'Method not allowed',
+            message: '/api/query only accepts POST requests',
+            received_method: request.method,
+            required_method: 'POST',
+            usage: {
+              endpoint: '/api/query',
+              method: 'POST',
+              body: {
+                query: "Your question here"
+              }
+            }
+          }), {
+            status: 405,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+            }
+          });
+        }
+      }
+
       // 404 for unknown routes
       return new Response(JSON.stringify({ 
         error: 'Endpoint not found',
-        available_endpoints: ['/health', '/api/query', '/test'],
-        received_path: path
+        message: `The path ${path} is not available`,
+        available_endpoints: ['/', '/health', '/api/query', '/test', '/debug'],
+        received_path: path,
+        received_method: request.method
       }), {
         status: 404,
         headers: {
@@ -115,13 +172,19 @@ export default {
   }
 };
 
-// Handle AI queries with origin check
+// Handle AI queries
 async function handleAIQuery(request, env, origin) {
   try {
     const { query } = await request.json();
 
     if (!query) {
-      return new Response(JSON.stringify({ error: 'Query is required' }), {
+      return new Response(JSON.stringify({ 
+        error: 'Query is required',
+        message: 'Please provide a query in the request body',
+        example: {
+          query: "What is the weather like?"
+        }
+      }), {
         status: 400,
         headers: {
           'Content-Type': 'application/json',
