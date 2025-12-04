@@ -1,18 +1,21 @@
-// JARVIS Backend - Using OpenAI-Compatible API
+// JARVIS Backend - Fixed Origin Detection
 export default {
   async fetch(request, env, ctx) {
     // Define allowed origins
     const ALLOWED_ORIGINS = [
       'https://jarvis-997.pages.dev',
       'https://jarvis-997.pages.dev/',
+      'null', // Allow direct browser access for testing
     ];
 
     // Get origin from request
     const origin = request.headers.get('Origin');
+    const userAgent = request.headers.get('User-Agent');
     
     // Check if origin is allowed
     const isAllowedOrigin = ALLOWED_ORIGINS.includes(origin) || 
-                           (!origin && request.headers.get('User-Agent')?.includes('Mozilla'));
+                           (!origin && userAgent?.includes('Mozilla')) || // Allow direct browser access
+                           (!origin && userAgent?.includes('curl')); // Allow curl access
     
     // Handle CORS preflight requests
     if (request.method === 'OPTIONS') {
@@ -20,7 +23,7 @@ export default {
         return new Response(null, {
           status: 200,
           headers: {
-            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+            'Access-Control-Allow-Origin': origin || '*',
             'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
             'Access-Control-Allow-Headers': 'Content-Type, Authorization',
             'Access-Control-Max-Age': '86400',
@@ -38,8 +41,11 @@ export default {
     if (!isAllowedOrigin) {
       return new Response(JSON.stringify({ 
         error: 'Access denied',
-        message: 'This API can only be accessed from https://jarvis-997.pages.dev/',
-        debug: `Origin: ${origin || 'none'}`
+        message: 'This API can only be accessed from https://jarvis-997.pages.dev/ or directly for testing',
+        debug: {
+          origin: origin || 'none',
+          user_agent: userAgent || 'none'
+        }
       }), {
         status: 403,
         headers: {
@@ -55,11 +61,12 @@ export default {
           message: 'J.A.R.V.I.S. Backend is running!',
           version: '3.0.0',
           endpoints: ['/health', '/api/query', '/test', '/debug'],
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          access_type: origin ? 'cors' : 'direct'
         }), {
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+            'Access-Control-Allow-Origin': origin || '*',
           }
         });
       }
@@ -70,11 +77,13 @@ export default {
           status: 'J.A.R.V.I.S. online',
           timestamp: new Date().toISOString(),
           version: '3.0.0',
-          origin: origin
+          origin: origin || 'direct_access',
+          access_type: origin ? 'cors' : 'direct',
+          user_agent: userAgent || 'none'
         }), {
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+            'Access-Control-Allow-Origin': origin || '*',
           }
         });
       }
@@ -86,13 +95,15 @@ export default {
           method: request.method,
           url: request.url,
           path: path,
-          origin: origin,
+          origin: origin || 'direct_access',
+          access_type: origin ? 'cors' : 'direct',
+          user_agent: userAgent || 'none',
           headers: Object.fromEntries(request.headers.entries()),
           query_params: Object.fromEntries(url.searchParams.entries())
         }), {
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+            'Access-Control-Allow-Origin': origin || '*',
           }
         });
       }
@@ -103,12 +114,13 @@ export default {
           message: 'Test endpoint working!',
           method: request.method,
           url: request.url,
-          origin: origin,
+          origin: origin || 'direct_access',
+          access_type: origin ? 'cors' : 'direct',
           timestamp: new Date().toISOString()
         }), {
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+            'Access-Control-Allow-Origin': origin || '*',
           }
         });
       }
@@ -134,7 +146,7 @@ export default {
             status: 405,
             headers: {
               'Content-Type': 'application/json',
-              'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+              'Access-Control-Allow-Origin': origin || '*',
             }
           });
         }
@@ -151,7 +163,7 @@ export default {
         status: 404,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+          'Access-Control-Allow-Origin': origin || '*',
         }
       });
 
@@ -165,7 +177,7 @@ export default {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+          'Access-Control-Allow-Origin': origin || '*',
         }
       });
     }
@@ -188,7 +200,7 @@ async function handleAIQuery(request, env, origin) {
         status: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Origin': origin || '*',
         }
       });
     }
@@ -204,7 +216,7 @@ async function handleAIQuery(request, env, origin) {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Origin': origin || '*',
         }
       });
     }
@@ -244,7 +256,7 @@ async function handleAIQuery(request, env, origin) {
         status: response.status,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': origin,
+          'Access-Control-Allow-Origin': origin || '*',
         }
       });
     }
@@ -264,11 +276,12 @@ async function handleAIQuery(request, env, origin) {
       response: aiResponse,
       status: 'success',
       timestamp: new Date().toISOString(),
-      model: 'deepseek-ai/DeepSeek-V3'
+      model: 'deepseek-ai/DeepSeek-V3',
+      access_type: origin ? 'cors' : 'direct'
     }), {
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Origin': origin || '*',
       }
     });
 
@@ -281,7 +294,7 @@ async function handleAIQuery(request, env, origin) {
       status: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': origin,
+        'Access-Control-Allow-Origin': origin || '*',
       }
     });
   }
