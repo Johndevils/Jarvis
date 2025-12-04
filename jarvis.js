@@ -1,88 +1,119 @@
-// Cloudflare Worker for JARVIS AI Backend
-// Deploy this to your Cloudflare Workers account
-
+// JARVIS Backend - Fixed Version
 export default {
   async fetch(request, env, ctx) {
-    // Handle CORS preflight requests
+    // Handle ALL CORS requests first
     if (request.method === 'OPTIONS') {
-      return handleCORS();
+      return new Response(null, {
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          'Access-Control-Max-Age': '86400',
+        }
+      });
     }
 
     const url = new URL(request.url);
     const path = url.pathname;
 
     try {
-      // Health check endpoint
+      // Health check - simple and reliable
       if (path === '/health') {
-        return new Response(JSON.stringify({ status: 'J.A.R.V.I.S. online' }), {
+        return new Response(JSON.stringify({ 
+          status: 'J.A.R.V.I.S. online',
+          timestamp: new Date().toISOString(),
+          version: '1.0.0'
+        }), {
           headers: {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
           }
         });
       }
 
-      // AI query endpoint
+      // AI Query endpoint
       if (path === '/api/query' && request.method === 'POST') {
         return await handleAIQuery(request, env);
       }
 
-      // Token validation endpoint (for initial setup)
-      if (path === '/api/validate-token' && request.method === 'POST') {
-        return await validateToken(request, env);
+      // Test endpoint for debugging
+      if (path === '/test' && request.method === 'GET') {
+        return new Response(JSON.stringify({ 
+          message: 'Worker is working!',
+          method: request.method,
+          url: request.url,
+          headers: Object.fromEntries(request.headers.entries())
+        }), {
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        });
       }
 
       // 404 for unknown routes
-      return new Response(JSON.stringify({ error: 'Endpoint not found' }), {
+      return new Response(JSON.stringify({ 
+        error: 'Endpoint not found',
+        available_endpoints: ['/health', '/api/query', '/test'],
+        received_path: path
+      }), {
         status: 404,
-        headers: getCORSHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
       });
 
     } catch (error) {
       console.error('Worker error:', error);
       return new Response(JSON.stringify({ 
         error: 'Internal server error',
-        message: error.message 
+        message: error.message,
+        stack: error.stack
       }), {
         status: 500,
-        headers: getCORSHeaders(),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
       });
     }
   }
 };
 
-// Handle AI queries to Hugging Face
+// Handle AI queries
 async function handleAIQuery(request, env) {
-  const { query } = await request.json();
-
-  if (!query) {
-    return new Response(JSON.stringify({ error: 'Query is required' }), {
-      status: 400,
-      headers: getCORSHeaders(),
-    });
-  }
-
-  // Get token from environment variables (most secure)
-  let token = env.HUGGINGFACE_TOKEN;
-
-  // Fallback to KV storage if env var not set
-  if (!token && env.JARVIS_KV) {
-    token = await env.JARVIS_KV.get('huggingface_token');
-  }
-
-  if (!token) {
-    return new Response(JSON.stringify({ 
-      error: 'API token not configured',
-      message: 'Please configure HUGGINGFACE_TOKEN environment variable'
-    }), {
-      status: 500,
-      headers: getCORSHeaders(),
-    });
-  }
-
   try {
+    const { query } = await request.json();
+
+    if (!query) {
+      return new Response(JSON.stringify({ error: 'Query is required' }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      });
+    }
+
+    // Get token from environment
+    const token = env.HUGGINGFACE_TOKEN;
+    
+    if (!token) {
+      return new Response(JSON.stringify({ 
+        error: 'API token not configured',
+        debug: 'HUGGINGFACE_TOKEN environment variable not set'
+      }), {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      });
+    }
+
+    // Call Hugging Face API
     const response = await fetch("https://api-inference.huggingface.co/models/deepseek-ai/deepseek-v3", {
       method: "POST",
       headers: {
@@ -99,9 +130,19 @@ async function handleAIQuery(request, env) {
     });
 
     if (!response.ok) {
-      const errorData = await response.text();
-      console.error('Hugging Face API error:', errorData);
-      throw new Error(`Hugging Face API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Hugging Face error:', errorText);
+      return new Response(JSON.stringify({ 
+        error: 'AI service error',
+        status: response.status,
+        details: errorText
+      }), {
+        status: response.status,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      });
     }
 
     const data = await response.json();
@@ -114,86 +155,26 @@ async function handleAIQuery(request, env) {
 
     return new Response(JSON.stringify({ 
       response: responseText,
-      status: 'success'
+      status: 'success',
+      timestamp: new Date().toISOString()
     }), {
-      headers: getCORSHeaders(),
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      }
     });
 
   } catch (error) {
     console.error('AI Query error:', error);
     return new Response(JSON.stringify({ 
-      error: 'Failed to query AI',
+      error: 'Failed to process query',
       message: error.message
     }), {
       status: 500,
-      headers: getCORSHeaders(),
-    });
-  }
-}
-
-// Validate token configuration
-async function validateToken(request, env) {
-  let token = env.HUGGINGFACE_TOKEN;
-
-  if (!token && env.JARVIS_KV) {
-    token = await env.JARVIS_KV.get('huggingface_token');
-  }
-
-  if (!token) {
-    return new Response(JSON.stringify({ 
-      valid: false,
-      message: 'No token configured'
-    }), {
-      headers: getCORSHeaders(),
-    });
-  }
-
-  try {
-    const response = await fetch("https://api-inference.huggingface.co/models/deepseek-ai/deepseek-v3", {
-      method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        inputs: "test",
-        parameters: {
-          max_new_tokens: 1,
-        }
-      }),
-    });
-
-    return new Response(JSON.stringify({ 
-      valid: response.ok,
-      message: response.ok ? 'Token is valid' : 'Token validation failed'
-    }), {
-      headers: getCORSHeaders(),
-    });
-
-  } catch (error) {
-    return new Response(JSON.stringify({ 
-      valid: false,
-      message: error.message
-    }), {
-      headers: getCORSHeaders(),
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      }
     });
   }
-}
-
-// CORS headers helper
-function getCORSHeaders() {
-  return {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
-  };
-}
-
-// Handle CORS preflight
-function handleCORS() {
-  return new Response(null, {
-    status: 200,
-    headers: getCORSHeaders(),
-  });
 }
