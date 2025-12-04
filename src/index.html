@@ -137,6 +137,19 @@
             background-color: #ef4444;
             box-shadow: 0 0 5px #ef4444;
         }
+        
+        .server-checking {
+            background-color: #f59e0b;
+            box-shadow: 0 0 5px #f59e0b;
+        }
+        
+        .domain-notice {
+            background-color: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            border-radius: 0.375rem;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
     </style>
 </head>
 <body class="bg-black text-white min-h-screen flex flex-col">
@@ -194,47 +207,64 @@
         <div class="bg-gray-900 p-8 rounded-lg border border-cyan-400 max-w-md w-full mx-4 glow-cyan">
             <h2 class="text-2xl font-bold mb-6 text-center text-cyan-400">J.A.R.V.I.S. Settings</h2>
             
+            <div class="domain-notice">
+                <p class="text-sm text-green-400">
+                    <i class="fas fa-shield-alt mr-2"></i>
+                    This API is restricted to https://jarvis-997.pages.dev/
+                </p>
+            </div>
+            
             <div class="mb-6">
                 <label for="worker-url" class="block text-sm font-medium mb-2">Backend Server URL</label>
                 <input type="text" id="worker-url" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-400" placeholder="https://your-worker.your-subdomain.workers.dev">
+                <p class="text-xs text-gray-400 mt-2">Example: https://jarvis-backend.your-subdomain.workers.dev</p>
             </div>
             
-            <div class="mb-6">
+            <div class="space-y-3">
                 <button id="test-connection" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition-colors">
-                    Test Connection
+                    <i class="fas fa-plug mr-2"></i>Test Connection
+                </button>
+                
+                <button id="save-settings" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded transition-colors">
+                    <i class="fas fa-save mr-2"></i>Save Settings
+                </button>
+                
+                <button id="close-settings" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition-colors">
+                    <i class="fas fa-times mr-2"></i>Close
                 </button>
             </div>
             
-            <div id="connection-status" class="text-sm text-center mb-4"></div>
-            
-            <button id="save-settings" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded transition-colors mb-4">
-                Save Settings
-            </button>
-            
-            <button id="close-settings" class="w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded transition-colors">
-                Close
-            </button>
+            <div id="connection-status" class="mt-4 p-3 rounded bg-gray-800 text-sm hidden"></div>
         </div>
     </div>
 
     <script>
         // Configuration
         const CONFIG = {
-            workerUrl: localStorage.getItem('jarvis_worker_url') || 'https://jarvis.metaspace.workers.dev/'
+            workerUrl: localStorage.getItem('jarvis_worker_url') || '',
+            allowedDomain: 'https://jarvis-997.pages.dev',
+            connectionTimeout: 10000
         };
 
         // Global variables
         let recognition;
         let isListening = false;
         let serverOnline = false;
+        let connectionRetries = 0;
+        const maxRetries = 3;
 
         // Initialize the app
         document.addEventListener('DOMContentLoaded', () => {
             updateClock();
             setInterval(updateClock, 1000);
             
-            // Check server connection
-            checkServerConnection();
+            // Check if we're on the correct domain
+            if (window.location.origin !== CONFIG.allowedDomain) {
+                addLog(`⚠️ This app is designed for ${CONFIG.allowedDomain}`);
+                addLog(`Current domain: ${window.location.origin}`);
+            } else {
+                addLog(`✅ Running on authorized domain: ${CONFIG.allowedDomain}`);
+            }
             
             // Event listeners
             document.getElementById('settings-btn').addEventListener('click', showSettings);
@@ -245,9 +275,21 @@
             // Set initial worker URL
             document.getElementById('worker-url').value = CONFIG.workerUrl;
             
-            // Initialize speech recognition
-            initializeSpeechRecognition();
+            // Initialize app
+            initializeApp();
         });
+
+        // Initialize app
+        async function initializeApp() {
+            if (CONFIG.workerUrl) {
+                addLog("Initializing J.A.R.V.I.S. systems...");
+                await checkServerConnection();
+                initializeSpeechRecognition();
+            } else {
+                addLog("No backend URL configured. Please configure settings.");
+                showSettings();
+            }
+        }
 
         // Update clock
         function updateClock() {
@@ -258,34 +300,148 @@
             document.getElementById('clock').textContent = `${hours}:${minutes}:${seconds}`;
         }
 
-        // Check server connection
+        // Check server connection with better error handling
         async function checkServerConnection() {
+            if (!CONFIG.workerUrl) {
+                updateServerStatus('offline');
+                return false;
+            }
+
+            updateServerStatus('checking');
+            addLog(`Connecting to backend: ${CONFIG.workerUrl}`);
+            
             try {
-                const response = await fetch(`${CONFIG.workerUrl}/health`);
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), CONFIG.connectionTimeout);
+                
+                const response = await fetch(`${CONFIG.workerUrl}/health`, {
+                    method: 'GET',
+                    signal: controller.signal,
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                clearTimeout(timeoutId);
+                
                 if (response.ok) {
+                    const data = await response.json();
                     serverOnline = true;
-                    updateServerStatus(true);
-                    addLog("Backend server connected successfully");
-                    initializeSpeechRecognition();
+                    updateServerStatus('online');
+                    addLog(`✓ Backend connected: ${data.status} v${data.version || '1.0.0'}`);
+                    connectionRetries = 0;
+                    return true;
                 } else {
-                    throw new Error('Server responded with error');
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
             } catch (error) {
                 serverOnline = false;
-                updateServerStatus(false);
-                addLog("Failed to connect to backend server");
-                console.error("Server connection error:", error);
+                updateServerStatus('offline');
+                
+                let errorMessage = 'Connection failed';
+                if (error.name === 'AbortError') {
+                    errorMessage = 'Connection timeout';
+                } else if (error.message.includes('CORS')) {
+                    errorMessage = 'CORS error - check worker CORS settings';
+                } else if (error.message.includes('Failed to fetch')) {
+                    errorMessage = 'Network error - invalid URL or worker offline';
+                } else if (error.message.includes('403')) {
+                    errorMessage = 'Access denied - domain not allowed';
+                } else {
+                    errorMessage = error.message;
+                }
+                
+                addLog(`✗ Backend error: ${errorMessage}`);
+                console.error('Connection error:', error);
+                
+                // Retry logic
+                if (connectionRetries < maxRetries) {
+                    connectionRetries++;
+                    addLog(`Retrying connection (${connectionRetries}/${maxRetries})...`);
+                    setTimeout(() => checkServerConnection(), 3000);
+                }
+                
+                return false;
             }
         }
 
         // Update server status indicator
-        function updateServerStatus(online) {
+        function updateServerStatus(status) {
             const statusEl = document.getElementById('server-status');
-            if (online) {
-                statusEl.className = 'server-status server-online';
-            } else {
-                statusEl.className = 'server-status server-offline';
+            statusEl.className = 'server-status';
+            
+            switch(status) {
+                case 'online':
+                    statusEl.classList.add('server-online');
+                    break;
+                case 'offline':
+                    statusEl.classList.add('server-offline');
+                    break;
+                case 'checking':
+                    statusEl.classList.add('server-checking');
+                    break;
             }
+        }
+
+        // Test connection with detailed feedback
+        async function testConnection() {
+            const workerUrl = document.getElementById('worker-url').value.trim();
+            const statusEl = document.getElementById('connection-status');
+            
+            if (!workerUrl) {
+                showConnectionStatus('Please enter a worker URL', 'error');
+                return;
+            }
+            
+            showConnectionStatus('Testing connection...', 'info');
+            
+            try {
+                const response = await fetch(`${workerUrl}/health`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showConnectionStatus(`✓ Connection successful! ${data.status}`, 'success');
+                } else if (response.status === 403) {
+                    const errorData = await response.json();
+                    showConnectionStatus(`✗ Access denied: ${errorData.message}`, 'error');
+                } else {
+                    showConnectionStatus(`✗ Server error: ${response.status} ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                let message = 'Connection failed';
+                if (error.name === 'AbortError') {
+                    message = 'Request timed out';
+                } else if (error.message.includes('CORS')) {
+                    message = 'CORS error - worker may need CORS headers';
+                }
+                showConnectionStatus(`✗ ${message}`, 'error');
+            }
+        }
+
+        // Show connection status
+        function showConnectionStatus(message, type) {
+            const statusEl = document.getElementById('connection-status');
+            statusEl.textContent = message;
+            statusEl.className = 'mt-4 p-3 rounded text-sm';
+            
+            switch(type) {
+                case 'success':
+                    statusEl.classList.add('bg-green-900', 'text-green-300');
+                    break;
+                case 'error':
+                    statusEl.classList.add('bg-red-900', 'text-red-300');
+                    break;
+                case 'info':
+                    statusEl.classList.add('bg-blue-900', 'text-blue-300');
+                    break;
+            }
+            
+            statusEl.classList.remove('hidden');
         }
 
         // Settings modal functions
@@ -307,33 +463,6 @@
                 hideSettings();
             } else {
                 alert("Please enter a valid worker URL");
-            }
-        }
-
-        async function testConnection() {
-            const workerUrl = document.getElementById('worker-url').value.trim();
-            const statusEl = document.getElementById('connection-status');
-            
-            if (!workerUrl) {
-                statusEl.textContent = 'Please enter a URL';
-                statusEl.className = 'text-sm text-center mb-4 text-red-400';
-                return;
-            }
-            
-            statusEl.textContent = 'Testing...';
-            statusEl.className = 'text-sm text-center mb-4 text-yellow-400';
-            
-            try {
-                const response = await fetch(`${workerUrl}/health`);
-                if (response.ok) {
-                    statusEl.textContent = '✓ Connection successful';
-                    statusEl.className = 'text-sm text-center mb-4 text-green-400';
-                } else {
-                    throw new Error('Server error');
-                }
-            } catch (error) {
-                statusEl.textContent = '✗ Connection failed';
-                statusEl.className = 'text-sm text-center mb-4 text-red-400';
             }
         }
 
@@ -518,7 +647,12 @@
                 });
                 
                 if (!response.ok) {
-                    throw new Error(`Server responded with ${response.status}`);
+                    if (response.status === 403) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.message);
+                    }
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `Server responded with ${response.status}`);
                 }
                 
                 const data = await response.json();
