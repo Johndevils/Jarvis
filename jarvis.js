@@ -1,4 +1,4 @@
-// JARVIS Backend - Updated with New Hugging Face API
+// JARVIS Backend - Using OpenAI-Compatible API
 export default {
   async fetch(request, env, ctx) {
     // Define allowed origins
@@ -53,7 +53,7 @@ export default {
       if (path === '/') {
         return new Response(JSON.stringify({ 
           message: 'J.A.R.V.I.S. Backend is running!',
-          version: '2.0.0',
+          version: '3.0.0',
           endpoints: ['/health', '/api/query', '/test', '/debug'],
           timestamp: new Date().toISOString()
         }), {
@@ -69,7 +69,7 @@ export default {
         return new Response(JSON.stringify({ 
           status: 'J.A.R.V.I.S. online',
           timestamp: new Date().toISOString(),
-          version: '2.0.0',
+          version: '3.0.0',
           origin: origin
         }), {
           headers: {
@@ -172,7 +172,7 @@ export default {
   }
 };
 
-// Handle AI queries with NEW Hugging Face API
+// Handle AI queries using OpenAI-compatible API
 async function handleAIQuery(request, env, origin) {
   try {
     const { query } = await request.json();
@@ -209,20 +209,27 @@ async function handleAIQuery(request, env, origin) {
       });
     }
 
-    // Call NEW Hugging Face API
-    const response = await fetch("https://router.huggingface.co/huggingface-projects/llama-3.2-3b-instruct", {
+    // Call Hugging Face using OpenAI-compatible API
+    const response = await fetch("https://router.huggingface.co/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        inputs: `You are Jarvis. Be brief, precise, and witty. Address me as Sir. User query: ${query}`,
-        parameters: {
-          max_new_tokens: 100,
-          temperature: 0.7,
-          return_full_text: false
-        }
+        model: "deepseek-ai/DeepSeek-V3",
+        messages: [
+          {
+            "role": "system",
+            "content": "You are Jarvis. Be brief, precise, and witty. Address me as Sir."
+          },
+          {
+            "role": "user",
+            "content": query
+          }
+        ],
+        max_tokens: 100,
+        temperature: 0.7
       }),
     });
 
@@ -244,33 +251,20 @@ async function handleAIQuery(request, env, origin) {
 
     const data = await response.json();
     
-    // Handle different response formats from new API
+    // Extract response from OpenAI-compatible format
     let aiResponse = "";
-    if (data && data[0] && data[0].generated_text) {
-      aiResponse = data[0].generated_text;
-    } else if (data && data.output) {
-      aiResponse = data.output;
-    } else if (data && typeof data === 'string') {
-      aiResponse = data;
+    if (data && data.choices && data.choices[0] && data.choices[0].message) {
+      aiResponse = data.choices[0].message.content;
     } else {
       aiResponse = "I'm sorry, Sir. I couldn't process that request.";
-    }
-    
-    // Clean up the response
-    if (aiResponse.includes("User query:")) {
-      aiResponse = aiResponse.split("User query:")[1].trim();
-    }
-    
-    // Remove any prompt remnants
-    if (aiResponse.includes("You are Jarvis")) {
-      aiResponse = aiResponse.split("User query:")[1]?.trim() || aiResponse;
+      console.warn('Unexpected response format:', data);
     }
 
     return new Response(JSON.stringify({ 
-      response: aiResponse || "I'm sorry, Sir. I couldn't process that request.",
+      response: aiResponse,
       status: 'success',
       timestamp: new Date().toISOString(),
-      model: 'llama-3.2-3b-instruct'
+      model: 'deepseek-ai/DeepSeek-V3'
     }), {
       headers: {
         'Content-Type': 'application/json',
