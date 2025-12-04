@@ -1,4 +1,4 @@
-// JARVIS Backend - Fixed Version with Better Error Handling
+// JARVIS Backend - Updated with New Hugging Face API
 export default {
   async fetch(request, env, ctx) {
     // Define allowed origins
@@ -53,7 +53,7 @@ export default {
       if (path === '/') {
         return new Response(JSON.stringify({ 
           message: 'J.A.R.V.I.S. Backend is running!',
-          version: '1.0.0',
+          version: '2.0.0',
           endpoints: ['/health', '/api/query', '/test', '/debug'],
           timestamp: new Date().toISOString()
         }), {
@@ -69,7 +69,7 @@ export default {
         return new Response(JSON.stringify({ 
           status: 'J.A.R.V.I.S. online',
           timestamp: new Date().toISOString(),
-          version: '1.0.0',
+          version: '2.0.0',
           origin: origin
         }), {
           headers: {
@@ -79,7 +79,7 @@ export default {
         });
       }
 
-      // Debug endpoint - shows request details
+      // Debug endpoint
       if (path === '/debug') {
         return new Response(JSON.stringify({ 
           message: 'Debug information',
@@ -172,7 +172,7 @@ export default {
   }
 };
 
-// Handle AI queries
+// Handle AI queries with NEW Hugging Face API
 async function handleAIQuery(request, env, origin) {
   try {
     const { query } = await request.json();
@@ -180,7 +180,7 @@ async function handleAIQuery(request, env, origin) {
     if (!query) {
       return new Response(JSON.stringify({ 
         error: 'Query is required',
-        message: 'Please provide a query in the request body',
+        message: 'Please provide a query in request body',
         example: {
           query: "What is the weather like?"
         }
@@ -209,8 +209,8 @@ async function handleAIQuery(request, env, origin) {
       });
     }
 
-    // Call Hugging Face API
-    const response = await fetch("https://api-inference.huggingface.co/models/deepseek-ai/deepseek-v3", {
+    // Call NEW Hugging Face API
+    const response = await fetch("https://router.huggingface.co/huggingface-projects/llama-3.2-3b-instruct", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${token}`,
@@ -221,6 +221,7 @@ async function handleAIQuery(request, env, origin) {
         parameters: {
           max_new_tokens: 100,
           temperature: 0.7,
+          return_full_text: false
         }
       }),
     });
@@ -242,17 +243,34 @@ async function handleAIQuery(request, env, origin) {
     }
 
     const data = await response.json();
-    const aiResponse = data[0]?.generated_text || "I'm sorry, Sir. I couldn't process that request.";
     
-    // Extract just the response part
-    const responseText = aiResponse.includes("User query:") 
-      ? aiResponse.split("User query:")[1].trim() 
-      : aiResponse;
+    // Handle different response formats from new API
+    let aiResponse = "";
+    if (data && data[0] && data[0].generated_text) {
+      aiResponse = data[0].generated_text;
+    } else if (data && data.output) {
+      aiResponse = data.output;
+    } else if (data && typeof data === 'string') {
+      aiResponse = data;
+    } else {
+      aiResponse = "I'm sorry, Sir. I couldn't process that request.";
+    }
+    
+    // Clean up the response
+    if (aiResponse.includes("User query:")) {
+      aiResponse = aiResponse.split("User query:")[1].trim();
+    }
+    
+    // Remove any prompt remnants
+    if (aiResponse.includes("You are Jarvis")) {
+      aiResponse = aiResponse.split("User query:")[1]?.trim() || aiResponse;
+    }
 
     return new Response(JSON.stringify({ 
-      response: responseText,
+      response: aiResponse || "I'm sorry, Sir. I couldn't process that request.",
       status: 'success',
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      model: 'llama-3.2-3b-instruct'
     }), {
       headers: {
         'Content-Type': 'application/json',
