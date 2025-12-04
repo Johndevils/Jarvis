@@ -225,6 +225,18 @@
                     <i class="fas fa-plug mr-2"></i>Test Connection
                 </button>
                 
+                <button id="test-root" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded transition-colors">
+                    <i class="fas fa-home mr-2"></i>Test Root Endpoint
+                </button>
+                
+                <button id="test-debug" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded transition-colors">
+                    <i class="fas fa-bug mr-2"></i>Test Debug Endpoint
+                </button>
+                
+                <button id="test-openai" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition-colors">
+                    <i class="fas fa-robot mr-2"></i>Test AI Query
+                </button>
+                
                 <button id="save-settings" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded transition-colors">
                     <i class="fas fa-save mr-2"></i>Save Settings
                 </button>
@@ -266,11 +278,14 @@
                 addLog(`✅ Running on authorized domain: ${CONFIG.allowedDomain}`);
             }
             
-            // Event listeners
+            // All event listeners
             document.getElementById('settings-btn').addEventListener('click', showSettings);
             document.getElementById('close-settings').addEventListener('click', hideSettings);
             document.getElementById('save-settings').addEventListener('click', saveSettings);
             document.getElementById('test-connection').addEventListener('click', testConnection);
+            document.getElementById('test-root').addEventListener('click', testRootEndpoint);
+            document.getElementById('test-debug').addEventListener('click', testDebugEndpoint);
+            document.getElementById('test-openai').addEventListener('click', testOpenAIFormat);
             
             // Set initial worker URL
             document.getElementById('worker-url').value = CONFIG.workerUrl;
@@ -420,6 +435,119 @@
                     message = 'CORS error - worker may need CORS headers';
                 }
                 showConnectionStatus(`✗ ${message}`, 'error');
+            }
+        }
+
+        // Test root endpoint
+        async function testRootEndpoint() {
+            const workerUrl = document.getElementById('worker-url').value.trim();
+            const statusEl = document.getElementById('connection-status');
+            
+            if (!workerUrl) {
+                showConnectionStatus('Please enter a worker URL', 'error');
+                return;
+            }
+            
+            showConnectionStatus('Testing root endpoint...', 'info');
+            
+            try {
+                const response = await fetch(`${workerUrl}/`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showConnectionStatus(`✓ Root endpoint working! ${data.message}`, 'success');
+                } else {
+                    showConnectionStatus(`✗ Root endpoint error: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                showConnectionStatus(`✗ Root test failed: ${error.message}`, 'error');
+            }
+        }
+
+        // Test debug endpoint
+        async function testDebugEndpoint() {
+            const workerUrl = document.getElementById('worker-url').value.trim();
+            const statusEl = document.getElementById('connection-status');
+            
+            if (!workerUrl) {
+                showConnectionStatus('Please enter a worker URL', 'error');
+                return;
+            }
+            
+            showConnectionStatus('Testing debug endpoint...', 'info');
+            
+            try {
+                const response = await fetch(`${workerUrl}/debug`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Debug response:', data);
+                    
+                    // Show detailed debug info
+                    const debugInfo = `
+                        ✓ Debug endpoint working!
+                        Access Type: ${data.access_type}
+                        Origin: ${data.origin}
+                        User Agent: ${data.user_agent?.substring(0, 50)}...
+                        Method: ${data.method}
+                    `;
+                    showConnectionStatus(debugInfo.trim(), 'success');
+                    
+                    // Also log to main log
+                    addLog(`Debug test successful: ${data.access_type} access from ${data.origin}`);
+                } else if (response.status === 403) {
+                    const errorData = await response.json();
+                    showConnectionStatus(`✗ Access denied: ${errorData.message}`, 'error');
+                    addLog(`Debug access denied: ${errorData.debug?.origin || 'unknown'}`);
+                } else {
+                    showConnectionStatus(`✗ Debug endpoint error: ${response.status} ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                showConnectionStatus(`✗ Debug test failed: ${error.message}`, 'error');
+                console.error('Debug test error:', error);
+            }
+        }
+
+        // Test OpenAI format
+        async function testOpenAIFormat() {
+            const workerUrl = document.getElementById('worker-url').value.trim();
+            const statusEl = document.getElementById('connection-status');
+            
+            if (!workerUrl) {
+                showConnectionStatus('Please enter a worker URL', 'error');
+                return;
+            }
+            
+            showConnectionStatus('Testing AI query...', 'info');
+            
+            try {
+                const response = await fetch(`${workerUrl}/api/query`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ query: 'What is the capital of France?' })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    showConnectionStatus(`✓ AI working! Response: ${data.response?.substring(0, 50)}...`, 'success');
+                } else {
+                    const errorData = await response.json();
+                    showConnectionStatus(`✗ AI error: ${errorData.message}`, 'error');
+                }
+            } catch (error) {
+                showConnectionStatus(`✗ AI test failed: ${error.message}`, 'error');
             }
         }
 
