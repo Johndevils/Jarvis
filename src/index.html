@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            background-color: #030712;
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
+        }
+        
+        .glass-morphism {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+        
+        .arc-reactor {
+            width: 200px;
+            height: 200px;
+            position: relative;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.8) 0%, rgba(6, 182, 212, 0.3) 50%, transparent 70%);
+            box-shadow: 
+                0 0 60px rgba(6, 182, 212, 0.8),
+                inset 0 0 30px rgba(6, 182, 212, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .arc-reactor:hover {
+            box-shadow: 
+                0 0 80px rgba(6, 182, 212, 1),
+                inset 0 0 40px rgba(6, 182, 212, 0.7);
+        }
+        
+        .arc-reactor-inner {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.9) 0%, rgba(6, 182, 212, 0.4) 60%, transparent 80%);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .arc-reactor-core {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ffffff 0%, rgba(6, 182, 212, 0.8) 50%, rgba(6, 182, 212, 0.4) 100%);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .arc-reactor-ring {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 2px solid rgba(6, 182, 212, 0.6);
+            box-sizing: border-box;
+        }
+        
+        .arc-reactor-ring:nth-child(1) {
+            transform: rotate(0deg);
+        }
+        
+        .arc-reactor-ring:nth-child(2) {
+            transform: rotate(60deg);
+        }
+        
+        .arc-reactor-ring:nth-child(3) {
+            transform: rotate(120deg);
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 0.8;
+            }
+            50% {
+                transform: scale(1.05);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 0.8;
+            }
+        }
+        
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+        
+        .idle {
+            animation: pulse 2s infinite ease-in-out;
+        }
+        
+        .thinking .arc-reactor-inner {
+            animation: spin 1s infinite linear;
+        }
+        
+        .thinking .arc-reactor-ring:nth-child(1) {
+            animation: spin 0.8s infinite linear;
+        }
+        
+        .thinking .arc-reactor-ring:nth-child(2) {
+            animation: spin 1.2s infinite linear reverse;
+        }
+        
+        .thinking .arc-reactor-ring:nth-child(3) {
+            animation: spin 1.5s infinite linear;
+        }
+        
+        .chat-message {
+            margin-bottom: 12px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            max-width: 80%;
+        }
+        
+        .user-message {
+            background-color: rgba(6, 182, 212, 0.2);
+            border-left: 3px solid rgba(6, 182, 212, 0.8);
+            margin-left: auto;
+            text-align: right;
+        }
+        
+        .jarvis-message {
+            background-color: rgba(30, 41, 59, 0.5);
+            border-left: 3px solid rgba(6, 182, 212, 0.8);
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-idle {
+            background-color: rgba(6, 182, 212, 0.6);
+            box-shadow: 0 0 5px rgba(6, 182, 212, 0.6);
+        }
+        
+        .status-listening {
+            background-color: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+            animation: pulse 1s infinite;
+        }
+        
+        .status-processing {
+            background-color: #f59e0b;
+            box-shadow: 0 0 10px #f59e0b;
+            animation: pulse 0.5s infinite;
+        }
+        
+        .status-speaking {
+            background-color: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+        
+        .pulse-effect {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: rgba(6, 182, 212, 0.3);
+            transform: scale(0);
+            opacity: 0;
+        }
+        
+        .pulse-effect.active {
+            animation: ripple 1.5s ease-out;
+        }
+        
+        @keyframes ripple {
+            0% {
+                transform: scale(0);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2);
+                opacity: 0;
+            }
+        }
+        
+        .search-input {
+            background: rgba(15, 23, 42, 0.5);
+            border: 1px solid rgba(6, 182, 212, 0.3);
+            color: #e0f2fe;
+            transition: all 0.3s ease;
+        }
+        
+        .search-input:focus {
+            background: rgba(15, 23, 42, 0.7);
+            border-color: rgba(6, 182, 212, 0.8);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+            outline: none;
+        }
+        
+        .search-input::placeholder {
+            color: rgba(6, 182, 212, 0.4);
+        }
+        
+        .send-button {
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.3) 0%, rgba(6, 182, 212, 0.1) 100%);
+            border: 1px solid rgba(6, 182, 212, 0.5);
+            transition: all 0.3s ease;
+        }
+        
+        .send-button:hover {
+            background: linear-gradient(135deg, rgba(6, 182, 212, 0.5) 0%, rgba(6, 182, 212, 0.3) 100%);
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
+            transform: translateY(-2px);
+        }
+        
+        .send-button:active {
+            transform: translateY(0);
+        }
+        
+        .send-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 8px 12px;
+            background-color: rgba(30, 41, 59, 0.5);
+            border-left: 3px solid rgba(6, 182, 212, 0.8);
+            border-radius: 8px;
+            margin-bottom: 12px;
+        }
+        
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            background-color: rgba(6, 182, 212, 0.8);
+            border-radius: 50%;
+            display: inline-block;
+            margin: 0 2px;
+            animation: typing 1.4s infinite;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+        
+        .typing-indicator span:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+        
+        @keyframes typing {
+            0%, 60%, 100% {
+                transform: translateY(0);
+                opacity: 0.7;
+            }
+            30% {
+                transform: translateY(-10px);
+                opacity: 1;
+            }
+        }
+        
+        .token-warning {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 0.875rem;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="w-full max-w-4xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold text-cyan-500 mb-2">J.A.R.V.I.S.</h1>
+            <p class="text-cyan-400 text-sm">Just A Rather Very Intelligent System</p>
+        </header>
+        
+        <main class="flex flex-col items-center">
+            <div id="arcReactor" class="arc-reactor idle mb-8">
+                <div class="pulse-effect"></div>
+                <div class="arc-reactor-inner">
+                    <div class="arc-reactor-ring"></div>
+                    <div class="arc-reactor-ring"></div>
+                    <div class="arc-reactor-ring"></div>
+                    <div class="arc-reactor-core"></div>
+                </div>
+            </div>
+            
+            <div class="w-full glass-morphism rounded-lg p-4 mb-4">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center">
+                        <span id="statusIndicator" class="status-indicator status-idle"></span>
+                        <span id="statusText" class="text-cyan-400 text-sm">Ready</span>
+                    </div>
+                    <div class="text-cyan-400 text-xs">
+                        Click reactor for voice or type below
+                    </div>
+                </div>
+            </div>
+            
+            <div id="chatContainer" class="w-full glass-morphism rounded-lg p-4 h-96 overflow-y-auto mb-4">
+                <div id="chatLog" class="space-y-2">
+                    <div class="chat-message jarvis-message">
+                        <p class="text-cyan-300">Good day, Sir. How may I assist you today?</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="w-full glass-morphism rounded-lg p-4 mb-4">
+                <div class="flex items-center space-x-2">
+                    <input 
+                        type="text" 
+                        id="searchInput" 
+                        placeholder="Type your query here, Sir..." 
+                        class="search-input flex-1 px-4 py-2 rounded-lg text-sm"
+                        disabled
+                    >
+                    <button 
+                        id="sendButton" 
+                        class="send-button px-6 py-2 rounded-lg text-cyan-300 font-semibold text-sm disabled:opacity-50"
+                        disabled
+                    >
+                        SEND
+                    </button>
+                </div>
+            </div>
+            
+            <div class="mt-4 text-center">
+                <p class="text-cyan-600 text-xs">Powered by DeepSeek AI </p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Simple obfuscation (NOT true encryption - for production use Netlify Functions)
+        const obfuscatedToken = 'WU9VUl9IVUdHSU5HX0ZBQ0VfQVBJX0tFWQ=='; // Base64 encoded placeholder
+        
+        // Decode function
+        function decodeToken(encoded) {
+            try {
+                return atob(encoded);
+            } catch (e) {
+                console.error('Token decode failed');
+                return null;
+            }
+        }
+        
+        // For Netlify deployment - this will be replaced by environment variable
+        // In Netlify dashboard: Site settings > Build & deploy > Environment > Environment variables
+        // Add: HF_TOKEN = your_actual_token_here
+        const HF_TOKEN = window.location.hostname === 'localhost' 
+            ? decodeToken(obfuscatedToken) 
+            : ''; // Will be injected by Netlify build process
+        
+        const HF_API_URL = "https://api-inference.huggingface.co/models/deepseek-ai/deepseek-coder-6.7b-instruct";
+        
+        // DOM Elements
+        const arcReactor = document.getElementById('arcReactor');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const statusText = document.getElementById('statusText');
+        const chatLog = document.getElementById('chatLog');
+        const pulseEffect = document.querySelector('.pulse-effect');
+        const searchInput = document.getElementById('searchInput');
+        const sendButton = document.getElementById('sendButton');
+        
+        // State management
+        let isProcessing = false;
+        
+        // Check token availability
+        function checkTokenAvailability() {
+            if (!HF_TOKEN || HF_TOKEN === "YOUR_HUGGING_FACE_API_KEY") {
+                const warningElement = document.createElement('div');
+                warningElement.className = 'token-warning';
+                warningElement.innerHTML = `
+                    <strong>⚠️ Security Notice:</strong> For production deployment on Netlify, 
+                    please set HF_TOKEN as an environment variable in your Netlify dashboard.
+                    <br><small>Current token: ${HF_TOKEN ? 'Configured' : 'Missing'}</small>
+                `;
+                chatLog.appendChild(warningElement);
+                scrollToBottom();
+            }
+        }
+        
+        // Enable input fields after page loads
+        window.addEventListener('load', () => {
+            searchInput.disabled = false;
+            sendButton.disabled = false;
+            checkTokenAvailability();
+        });
+        
+        // Speech Recognition Setup
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+        
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US';
+            
+            recognition.onstart = () => {
+                updateStatus('listening', 'Listening...');
+            };
+            
+            recognition.onresult = (event) => {
+                const transcript = event.results[0][0].transcript;
+                addUserMessage(transcript);
+                processUserInput(transcript);
+            };
+            
+            recognition.onerror = (event) => {
+                updateStatus('idle', 'Error: ' + event.error);
+                setTimeout(() => updateStatus('idle', 'Ready'), 2000);
+            };
+            
+            recognition.onend = () => {
+                if (statusText.textContent === 'Listening...') {
+                    updateStatus('idle', 'Ready');
+                }
+            };
+        } else {
+            console.error('Speech recognition not supported in this browser.');
+            addJarvisMessage('Speech recognition is not supported in your browser, Sir. Please use the text input below.');
+        }
+        
+        // Event Listeners
+        arcReactor.addEventListener('click', () => {
+            if (recognition && statusIndicator.classList.contains('status-idle') && !isProcessing) {
+                triggerPulseEffect();
+                recognition.start();
+            }
+        });
+        
+        // Text input event listeners
+        searchInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !isProcessing && searchInput.value.trim()) {
+                handleTextInput();
+            }
+        });
+        
+        sendButton.addEventListener('click', () => {
+            if (!isProcessing && searchInput.value.trim()) {
+                handleTextInput();
+            }
+        });
+        
+        // Enable/disable input based on processing state
+        function toggleInputs(disabled) {
+            searchInput.disabled = disabled;
+            sendButton.disabled = disabled;
+        }
+        
+        // Handle text input
+        function handleTextInput() {
+            const input = searchInput.value.trim();
+            if (input) {
+                addUserMessage(input);
+                searchInput.value = '';
+                processUserInput(input);
+            }
+        }
+        
+        // Helper Functions
+        function updateStatus(status, text) {
+            statusIndicator.className = 'status-indicator';
+            statusIndicator.classList.add(`status-${status}`);
+            statusText.textContent = text;
+            
+            if (status === 'processing') {
+                isProcessing = true;
+                arcReactor.classList.add('thinking');
+                arcReactor.classList.remove('idle');
+                toggleInputs(true);
+                showTypingIndicator();
+            } else {
+                isProcessing = false;
+                arcReactor.classList.remove('thinking');
+                arcReactor.classList.add('idle');
+                toggleInputs(false);
+                hideTypingIndicator();
+            }
+        }
+        
+        function triggerPulseEffect() {
+            pulseEffect.classList.remove('active');
+            void pulseEffect.offsetWidth; // Trigger reflow
+            pulseEffect.classList.add('active');
+        }
+        
+        function showTypingIndicator() {
+            const existingIndicator = document.getElementById('typingIndicator');
+            if (!existingIndicator) {
+                const indicator = document.createElement('div');
+                indicator.id = 'typingIndicator';
+                indicator.className = 'typing-indicator';
+                indicator.innerHTML = `
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                `;
+                chatLog.appendChild(indicator);
+                scrollToBottom();
+            }
+        }
+        
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) {
+                indicator.remove();
+            }
+        }
+        
+        function addUserMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'chat-message user-message';
+            messageElement.innerHTML = `<p class="text-cyan-100">${message}</p>`;
+            chatLog.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        function addJarvisMessage(message) {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'chat-message jarvis-message';
+            messageElement.innerHTML = `<p class="text-cyan-300">${message}</p>`;
+            chatLog.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        function scrollToBottom() {
+            const chatContainer = document.getElementById('chatContainer');
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        
+        // API Processing
+        async function processUserInput(input) {
+            updateStatus('processing', 'Processing...');
+            
+            try {
+                if (!HF_TOKEN || HF_TOKEN === "YOUR_HUGGING_FACE_API_KEY") {
+                    throw new Error("Hugging Face API token is missing. Please configure it properly for deployment.");
+                }
+                
+                const systemPrompt = "You are Jarvis, a helpful AI assistant. Answer briefly, concisely, and address the user as 'Sir'.";
+                const prompt = `${systemPrompt}\n\nUser: ${input}\nJarvis:`;
+                
+                const response = await fetch(HF_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${HF_TOKEN}`
+                    },
+                    body: JSON.stringify({
+                        inputs: prompt,
+                        parameters: {
+                            max_new_tokens: 150,
+                            temperature: 0.7,
+                            do_sample: true,
+                            return_full_text: false
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+                
+                const data = await response.json();
+                const jarvisResponse = data[0]?.generated_text || "I apologize, Sir, but I couldn't process your request at the moment.";
+                
+                // Clean up the response to remove any continuation of the prompt
+                const cleanedResponse = jarvisResponse.replace(/User:|Jarvis:/g, '').trim();
+                
+                addJarvisMessage(cleanedResponse);
+                speakResponse(cleanedResponse);
+                
+            } catch (error) {
+                console.error('Error processing request:', error);
+                addJarvisMessage(`I apologize, Sir, but an error occurred: ${error.message}`);
+                updateStatus('idle', 'Ready');
+            }
+        }
+        
+        // Text-to-Speech
+        function speakResponse(text) {
+            updateStatus('speaking', 'Speaking...');
+            
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.rate = 0.9;
+            utterance.pitch = 0.8;
+            utterance.volume = 0.8;
+            
+            utterance.onend = () => {
+                updateStatus('idle', 'Ready');
+            };
+            
+            utterance.onerror = (event) => {
+                console.error('Speech synthesis error:', event);
+                updateStatus('idle', 'Ready');
+            };
+            
+            window.speechSynthesis.speak(utterance);
+        }
+    </script>
+</body>
+</html>
