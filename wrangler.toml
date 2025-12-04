@@ -1,0 +1,13 @@
+name = "jarvis-backend"
+main = "jarvis.js"
+compatibility_date = "2023-12-01"
+
+# Optional: Bind KV namespace for token storage
+# [[kv_namespaces]]
+# binding = "JARVIS_KV"
+# id = "your-kv-namespace-id"
+# preview_id = "your-preview-kv-namespace-id"
+
+# Environment variables (set these in Cloudflare dashboard or using wrangler)
+# [vars]
+# These should be set as secrets for production
