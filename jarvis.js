@@ -1,21 +1,52 @@
-// JARVIS Backend - Fixed Version
+// JARVIS Backend - Secure Version with Origin Restriction
 export default {
   async fetch(request, env, ctx) {
-    // Handle ALL CORS requests first
+    // Define allowed origins
+    const ALLOWED_ORIGINS = [
+      'https://jarvis-997.pages.dev',
+      'https://jarvis-997.pages.dev/',  // With trailing slash
+    ];
+
+    // Get the origin from the request
+    const origin = request.headers.get('Origin');
+    
+    // Check if the origin is allowed
+    const isAllowedOrigin = ALLOWED_ORIGINS.includes(origin) || 
+                           (!origin && request.headers.get('User-Agent')?.includes('Mozilla'));
+    
+    // Handle CORS preflight requests for allowed origins
     if (request.method === 'OPTIONS') {
-      return new Response(null, {
-        status: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-          'Access-Control-Max-Age': '86400',
-        }
-      });
+      if (isAllowedOrigin) {
+        return new Response(null, {
+          status: 200,
+          headers: {
+            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            'Access-Control-Max-Age': '86400',
+          }
+        });
+      } else {
+        return new Response(null, { status: 403 });
+      }
     }
 
     const url = new URL(request.url);
     const path = url.pathname;
+
+    // For non-OPTIONS requests, check origin
+    if (!isAllowedOrigin) {
+      return new Response(JSON.stringify({ 
+        error: 'Access denied',
+        message: 'This API can only be accessed from https://jarvis-997.pages.dev/',
+        debug: `Origin: ${origin || 'none'}`
+      }), {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+    }
 
     try {
       // Health check - simple and reliable
@@ -23,18 +54,19 @@ export default {
         return new Response(JSON.stringify({ 
           status: 'J.A.R.V.I.S. online',
           timestamp: new Date().toISOString(),
-          version: '1.0.0'
+          version: '1.0.0',
+          origin: origin
         }), {
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
           }
         });
       }
 
       // AI Query endpoint
       if (path === '/api/query' && request.method === 'POST') {
-        return await handleAIQuery(request, env);
+        return await handleAIQuery(request, env, origin);
       }
 
       // Test endpoint for debugging
@@ -43,11 +75,12 @@ export default {
           message: 'Worker is working!',
           method: request.method,
           url: request.url,
+          origin: origin,
           headers: Object.fromEntries(request.headers.entries())
         }), {
           headers: {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
           }
         });
       }
@@ -61,7 +94,7 @@ export default {
         status: 404,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
         }
       });
 
@@ -75,15 +108,15 @@ export default {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin || ALLOWED_ORIGINS[0],
         }
       });
     }
   }
 };
 
-// Handle AI queries
-async function handleAIQuery(request, env) {
+// Handle AI queries with origin check
+async function handleAIQuery(request, env, origin) {
   try {
     const { query } = await request.json();
 
@@ -92,7 +125,7 @@ async function handleAIQuery(request, env) {
         status: 400,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
         }
       });
     }
@@ -108,7 +141,7 @@ async function handleAIQuery(request, env) {
         status: 500,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
         }
       });
     }
@@ -140,7 +173,7 @@ async function handleAIQuery(request, env) {
         status: response.status,
         headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Origin': origin,
         }
       });
     }
@@ -160,7 +193,7 @@ async function handleAIQuery(request, env) {
     }), {
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
       }
     });
 
@@ -173,7 +206,7 @@ async function handleAIQuery(request, env) {
       status: 500,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': origin,
       }
     });
   }
