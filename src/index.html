@@ -167,6 +167,18 @@
 
     <!-- Main content -->
     <main class="flex-1 flex flex-col items-center justify-center p-4">
+        <!-- Speech Recognition Tips -->
+        <div class="mb-4 p-3 bg-gray-800 bg-opacity-50 rounded-lg max-w-md">
+            <h3 class="text-cyan-400 text-sm font-bold mb-2">🎤 Speech Recognition Tips</h3>
+            <ul class="text-xs text-gray-400 space-y-1">
+                <li>• Speak clearly and in English</li>
+                <li>• Use simple commands like "Hello Jarvis"</li>
+                <li>• Say "Help" to see all commands</li>
+                <li>• Ensure microphone permission is granted</li>
+                <li>• Minimize background noise</li>
+            </ul>
+        </div>
+
         <!-- Video container -->
         <div class="relative mb-8">
             <video id="jarvis-video" class="circular-video" autoplay muted loop>
@@ -220,7 +232,20 @@
                 <p class="text-xs text-gray-400 mt-2">Example: https://jarvis-backend.your-subdomain.workers.dev</p>
             </div>
             
+            <div class="mb-4">
+                <label for="speech-lang" class="block text-sm font-medium mb-2">Speech Language</label>
+                <select id="speech-lang" class="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-md">
+                    <option value="en-US">English (US)</option>
+                    <option value="en-GB">English (UK)</option>
+                    <option value="hi-IN">Hindi (India)</option>
+                </select>
+            </div>
+            
             <div class="space-y-3">
+                <button id="test-speech" class="w-full bg-pink-600 hover:bg-pink-700 text-white font-bold py-2 px-4 rounded transition-colors">
+                    <i class="fas fa-microphone mr-2"></i>Test Speech Recognition
+                </button>
+                
                 <button id="test-connection" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition-colors">
                     <i class="fas fa-plug mr-2"></i>Test Connection
                 </button>
@@ -286,9 +311,12 @@
             document.getElementById('test-root').addEventListener('click', testRootEndpoint);
             document.getElementById('test-debug').addEventListener('click', testDebugEndpoint);
             document.getElementById('test-openai').addEventListener('click', testOpenAIFormat);
+            document.getElementById('test-speech').addEventListener('click', testSpeechRecognition);
             
-            // Set initial worker URL
+            // Set initial worker URL and language
             document.getElementById('worker-url').value = CONFIG.workerUrl;
+            const savedLang = localStorage.getItem('jarvis_speech_lang') || 'en-US';
+            document.getElementById('speech-lang').value = savedLang;
             
             // Initialize app
             initializeApp();
@@ -551,6 +579,29 @@
             }
         }
 
+        // Test speech recognition
+        function testSpeechRecognition() {
+            if (!recognition) {
+                addLog("Speech recognition not available");
+                return;
+            }
+            
+            addLog("Testing speech recognition...");
+            updateStatus("Testing...");
+            
+            // Start a single recognition session
+            recognition.start();
+            
+            // Auto-stop after 5 seconds
+            setTimeout(() => {
+                if (isListening) {
+                    recognition.stop();
+                    addLog("Speech recognition test completed");
+                    updateStatus("Ready");
+                }
+            }, 5000);
+        }
+
         // Show connection status
         function showConnectionStatus(message, type) {
             const statusEl = document.getElementById('connection-status');
@@ -583,10 +634,20 @@
 
         function saveSettings() {
             const workerUrl = document.getElementById('worker-url').value.trim();
+            const speechLang = document.getElementById('speech-lang').value;
+            
             if (workerUrl) {
                 CONFIG.workerUrl = workerUrl;
                 localStorage.setItem('jarvis_worker_url', workerUrl);
+                localStorage.setItem('jarvis_speech_lang', speechLang);
                 addLog("Settings saved successfully");
+                
+                // Reinitialize speech recognition with new language
+                if (recognition) {
+                    recognition.lang = speechLang;
+                    addLog(`Speech language set to: ${speechLang}`);
+                }
+                
                 checkServerConnection();
                 hideSettings();
             } else {
@@ -594,7 +655,7 @@
             }
         }
 
-        // Initialize speech recognition
+        // Initialize speech recognition with improved handling
         function initializeSpeechRecognition() {
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                 addLog("Speech recognition not supported in this browser, Sir.");
@@ -606,24 +667,55 @@
             recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.interimResults = false;
-            recognition.lang = 'en-US';
+            recognition.lang = 'en-US'; // Force English language
+            recognition.maxAlternatives = 1; // Get best alternative
             
             recognition.onstart = () => {
                 isListening = true;
                 updateStatus("Listening...");
                 document.getElementById('listening-indicator').classList.remove('hidden');
                 document.getElementById('audio-visualizer').classList.remove('hidden');
+                addLog("🎤 Speech recognition started");
             };
             
             recognition.onresult = (event) => {
                 const transcript = event.results[0][0].transcript.toLowerCase();
-                addLog(`You: ${transcript}`);
-                processCommand(transcript);
+                const confidence = event.results[0][0].confidence;
+                
+                // Log what was actually heard
+                addLog(`🎤 Heard: "${transcript}" (confidence: ${Math.round(confidence * 100)}%)`);
+                
+                // Only process if confidence is high enough
+                if (confidence > 0.7) {
+                    processCommand(transcript);
+                } else {
+                    addLog(`⚠️ Low confidence, ignoring command`);
+                }
             };
             
             recognition.onerror = (event) => {
                 console.error("Speech recognition error:", event.error);
-                addLog(`Error: ${event.error}, Sir.`);
+                let errorMessage = `Speech error: ${event.error}`;
+                
+                // Provide more helpful error messages
+                switch(event.error) {
+                    case 'no-speech':
+                        errorMessage = "No speech detected, Sir.";
+                        break;
+                    case 'audio-capture':
+                        errorMessage = "Microphone not working, Sir.";
+                        break;
+                    case 'not-allowed':
+                        errorMessage = "Microphone permission denied, Sir.";
+                        break;
+                    case 'network':
+                        errorMessage = "Network error, Sir.";
+                        break;
+                    default:
+                        errorMessage = `Speech error: ${event.error}, Sir.`;
+                }
+                
+                addLog(errorMessage);
                 updateStatus("Ready");
                 isListening = false;
                 document.getElementById('listening-indicator').classList.add('hidden');
@@ -635,6 +727,8 @@
                 updateStatus("Ready");
                 document.getElementById('listening-indicator').classList.add('hidden');
                 document.getElementById('audio-visualizer').classList.add('hidden');
+                addLog("🔇 Speech recognition ended");
+                
                 // Restart listening after a short delay
                 setTimeout(() => {
                     if (!isListening) {
@@ -682,24 +776,45 @@
             }
         }
 
-        // Process command
+        // Process command with improved handling
         function processCommand(command) {
-            // Browser controls
-            if (command === "go back") {
-                history.back();
-                addLog("Navigating back, Sir.");
+            // Clean up the command
+            command = command.trim().toLowerCase();
+            
+            // Log the command being processed
+            addLog(`🤖 Processing: "${command}"`);
+            
+            // Help command
+            if (command === "help" || command === "commands") {
+                addLog("📋 Available commands:");
+                addLog("  • 'go back' or 'back' - Navigate back");
+                addLog("  • 'refresh' or 'reload' - Reload page");
+                addLog("  • 'print' - Print page");
+                addLog("  • 'youtube [query]' or 'play [query]' - Search YouTube");
+                addLog("  • 'github [query]' or 'repo [query]' - Search GitHub");
+                addLog("  • 'duckduckgo [query]' or 'private search [query]' - Search privately");
+                addLog("  • 'search [query]' - Google search");
+                addLog("  • 'open [website]' - Open website");
+                addLog("  • Any other text - Ask J.A.R.V.I.S.");
                 return;
             }
             
-            if (command === "refresh") {
+            // Browser controls
+            if (command === "go back" || command === "back") {
+                history.back();
+                addLog("✅ Navigating back, Sir.");
+                return;
+            }
+            
+            if (command === "refresh" || command === "reload") {
                 location.reload();
-                addLog("Refreshing the page, Sir.");
+                addLog("✅ Refreshing page, Sir.");
                 return;
             }
             
             if (command === "print") {
                 window.print();
-                addLog("Printing the page, Sir.");
+                addLog("✅ Printing page, Sir.");
                 return;
             }
             
@@ -710,7 +825,7 @@
             if ((match = command.match(/(?:youtube|play)\s+(.+)/i))) {
                 const query = encodeURIComponent(match[1]);
                 window.open(`https://www.youtube.com/results?search_query=${query}`, '_blank');
-                addLog(`Searching YouTube for "${match[1]}", Sir.`);
+                addLog(`✅ Searching YouTube for "${match[1]}", Sir.`);
                 return;
             }
             
@@ -718,7 +833,7 @@
             if ((match = command.match(/(?:github|repo)\s+(.+)/i))) {
                 const query = encodeURIComponent(match[1]);
                 window.open(`https://github.com/search?q=${query}`, '_blank');
-                addLog(`Searching GitHub for "${match[1]}", Sir.`);
+                addLog(`✅ Searching GitHub for "${match[1]}", Sir.`);
                 return;
             }
             
@@ -726,7 +841,7 @@
             if ((match = command.match(/(?:duckduckgo|private search)\s+(.+)/i))) {
                 const query = encodeURIComponent(match[1]);
                 window.open(`https://duckduckgo.com/?q=${query}`, '_blank');
-                addLog(`Searching privately for "${match[1]}", Sir.`);
+                addLog(`✅ Searching privately for "${match[1]}", Sir.`);
                 return;
             }
             
@@ -734,7 +849,7 @@
             if ((match = command.match(/search\s+(.+)/i))) {
                 const query = encodeURIComponent(match[1]);
                 window.open(`https://www.google.com/search?q=${query}`, '_blank');
-                addLog(`Searching Google for "${match[1]}", Sir.`);
+                addLog(`✅ Searching Google for "${match[1]}", Sir.`);
                 return;
             }
             
@@ -748,22 +863,23 @@
                     url = 'https://' + url;
                 }
                 window.open(url, '_blank');
-                addLog(`Opening ${url}, Sir.`);
+                addLog(`✅ Opening ${url}, Sir.`);
                 return;
             }
             
             // AI fallback
             if (serverOnline) {
+                addLog("🤖 Querying AI...");
                 queryAI(command);
             } else {
-                addLog("Backend server is offline. Please check your connection, Sir.");
+                addLog("❌ Backend server is offline. Please check your connection, Sir.");
             }
         }
 
         // Query AI through backend
         async function queryAI(query) {
             updateStatus("Thinking...");
-            addLog("Querying AI...");
+            addLog("🤖 Querying AI...");
             
             try {
                 const response = await fetch(`${CONFIG.workerUrl}/api/query`, {
@@ -789,11 +905,11 @@
                     throw new Error(data.error);
                 }
                 
-                addLog(`J.A.R.V.I.S.: ${data.response}`);
+                addLog(`✅ J.A.R.V.I.S.: ${data.response}`);
                 speak(data.response);
             } catch (error) {
                 console.error("AI query error:", error);
-                addLog(`Error: ${error.message}, Sir.`);
+                addLog(`❌ Error: ${error.message}, Sir.`);
             } finally {
                 updateStatus("Ready");
             }
